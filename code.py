@@ -2,21 +2,29 @@
 # -*- coding: utf-8 -*-
 
 """
-This is what privateInfo.py should look like:
-secrets = {
-  'ssid': 'FairCom',
-  'password': '6faircom3global0operations0',
-  "broker": "adamh-dt-2019.west.faircom.com",
-  "port": 1883,
-  'homeSsid': 'Red5',
-  'homePassword': '8012254722',
-  "homeBroker": "192.168.55.200",
-  'location': 'Utah, US',
+This is what privateInfo.json should look like:
+{
+  "brokerConnections": [
+    {
+      "ssid": "nunya",
+      "password": "nunya",
+      "broker": "nunya",
+      "port": 1883
+    },
+    {
+      "ssid": "nunya",
+      "password": "nunya",
+      "broker": "nunya",
+      "port": 1883
+    }
+  ],
   "clientId": "QPTyESP32S2",
+  "location": "Utah, US",
   "aio_username": "",
-  "aio_key": "",
+  "aio_key": ""
 }
 """
+import json
 import time
 
 import adafruit_minimqtt.adafruit_minimqtt as mqtt_class
@@ -25,13 +33,6 @@ import board
 import socketpool
 import wifi as wifi
 
-
-# Add a privateInfo.py to your filesystem that has a dictionary called secrets with your WiFi credentials.
-try:
-  from privateInfo import secrets
-except ImportError:
-  print( "WiFi credentials are kept in privateInfo.py, please add them there!" )
-  raise
 
 """
 pip install adafruit-circuitpython-sht4x
@@ -145,6 +146,7 @@ def poll_sensors():
   add_value( sht_temp, temperature )
   add_value( sht_humidity, relative_humidity )
   if ip_address is not None:
+    # noinspection PyUnresolvedReferences
     rssi = wifi.radio.ap_info.rssi
 
 
@@ -165,6 +167,7 @@ def infinite_loop():
       print( f"Loop count: {loop_count}" )
       print( f"RSSI: {rssi}" )
       print( f"IP address: {ip_address}" )
+      print( f"MAC address: {mac_address}" )
       print( f"Poll interval: {sensor_interval}" )
       print( f"Publishing to '{mqtt_client.broker}'" )
       mqtt_client.publish( celsiusTopic, average_list( sht_temp ) )
@@ -182,49 +185,52 @@ def get_mac_address():
   mac_string = ""
   subsequent = False
   i = 0
+  # noinspection PyUnresolvedReferences
   for _ in wifi.radio.mac_address:
     if subsequent:
       mac_string += ":"
-    mac_string += f"{wifi.radio.mac_address[i]:02x}"
+    # noinspection PyUnresolvedReferences
+    mac_string += f"{wifi.radio.mac_address[i]:02X}"
     subsequent = True
     i += 1
   return mac_string
 
 
-def wifi_scan():
-  # Scan for SSIDs and return the ones we are interested in.
-  ssid_found = ""
+def wifi_scan( config ):
+  # Scan for SSIDs and return the last one found that is in the configuration parameter.
+  connection_to_use = None
   print( "Available WiFi networks:" )
+  # noinspection PyUnresolvedReferences
   for network in wifi.radio.start_scanning_networks():
     print( "\t%s\t\tRSSI: %d\tChannel: %d" % (str( network.ssid, "utf-8" ), network.rssi, network.channel) )
-    if network.ssid == "Red5":
-      ssid_found = "Red5"
-    if network.ssid == "FairCom":
-      ssid_found = "FairCom"
-  wifi.radio.stop_scanning_networks()
-  return ssid_found
+    for connection in config['brokerConnections']:
+      if connection['ssid'] == network.ssid:
+        connection_to_use = connection
+  return connection_to_use
 
 
+# noinspection PyUnresolvedReferences
 def wifi_connect():
   global mac_address, ip_address
-  wifi_found = wifi_scan()
+  wifi_connection = wifi_scan( configuration )
 
-  print( "Connecting to %s" % wifi_found )
-  password = secrets['homePassword']
-  if wifi_found == "FairCom":
-    password = secrets['password']
-  wifi.radio.connect( wifi_found, password )
-  print( f"Connected to {wifi_found}!" )
+  print( "Connecting to %s" % wifi_connection['ssid'] )
+  wifi.radio.connect( wifi_connection['ssid'], wifi_connection['password'] )
+  print( f"Connected to {wifi_connection['ssid']}!" )
   mac_address = get_mac_address()
   ip_address = f"{wifi.radio.ipv4_address}"
-  wifi.radio.hostname = secrets['clientId']
+  wifi.radio.hostname = configuration['clientId']
   print( f"  MAC address: {mac_address}" )
   print( f"  IP address: {ip_address}" )
+  print( f"  Hostname: {configuration['clientId']}" )
   if ip_address is not None:
-    print( f"  AP info: {wifi.radio.ap_info.rssi}" )
+    print( f"  RSSI: {wifi.radio.ap_info.rssi}" )
+  return wifi_connection
 
 
 if __name__ == "__main__":
+  with open( "privateInfo.json", "r" ) as config_file:
+    configuration = json.loads( config_file.read() )
   # i2c = board.I2C()  # uses board.SCL and board.SDA
   # noinspection PyUnresolvedReferences
   i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
@@ -238,23 +244,19 @@ if __name__ == "__main__":
   # noinspection PyUnresolvedReferences
   print( "Current mode is: ", adafruit_sht4x.Mode.string[sht40.mode] )
 
-  wifi_connect()
-
-  broker_to_use = secrets['homeBroker']
-  if ip_address.startswith( "10." ):
-    broker_to_use = secrets['broker']
+  broker_info = wifi_connect()
 
   # noinspection PyUnresolvedReferences
   pool = socketpool.SocketPool( wifi.radio )
 
   # Set up a MiniMQTT Client
   mqtt_client = mqtt_class.MQTT(
-    broker = secrets["broker"],
-    port = secrets["port"],
-    username = secrets["aio_username"],
-    password = secrets["aio_key"],
+    broker = broker_info['broker'],
+    port = broker_info["port"],
+    username = configuration["aio_username"],
+    password = configuration["aio_key"],
     socket_pool = pool,
-    client_id = secrets["clientId"],
+    client_id = configuration["clientId"],
     is_ssl = False,
   )
 
@@ -267,8 +269,8 @@ if __name__ == "__main__":
   mqtt_client.on_message = message
 
   try:
-    print( "Attempting to connect to %s" % mqtt_client.broker )
-    mqtt_client.connect( host = mqtt_client.broker, port = 1883, keep_alive = 60 )
+    print( "Attempting to connect to %s" % broker_info['broker'] )
+    mqtt_client.connect( host = broker_info['broker'], port = 1883, keep_alive = 60 )
 
     print( "Subscribing to %s" % command_topic )
     mqtt_client.subscribe( command_topic )
@@ -276,9 +278,9 @@ if __name__ == "__main__":
     infinite_loop()
 
   except KeyError as key_error:
-    print( "\n------------------------------------------------" )
-    print( "There was a key error, likely in privateInfo.py!" )
-    print( "------------------------------------------------\n" )
+    print( "\n--------------------------------------------------" )
+    print( "There was a key error, likely in privateInfo.json!" )
+    print( "--------------------------------------------------\n" )
 
   finally:
     print( "Unsubscribing from %s" % command_topic )
