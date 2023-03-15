@@ -26,12 +26,13 @@ This is what privateInfo.json should look like:
 """
 import json
 import time
-
+import neopixel
 import adafruit_minimqtt.adafruit_minimqtt as mqtt_class
 import adafruit_sht4x
 import board
 import socketpool
 import wifi as wifi
+
 
 """
 pip install adafruit-circuitpython-sht4x
@@ -53,6 +54,7 @@ sensor_interval = 15
 mac_address = "00:11:22:AA:BB:CC"
 ip_address = "127.0.0.1"
 rssi = -21
+pixel_modulus = 0
 
 
 # noinspection PyUnusedLocal
@@ -149,6 +151,33 @@ def poll_sensors():
     rssi = wifi.radio.ap_info.rssi
 
 
+def change_pixels():
+  """
+    red: (255, 0, 0)
+    orange: (255, 127, 0)
+    yellow: (255, 255, 0)
+    green: (0, 255, 0)
+    blue: (0, 0, 255)
+    indigo: (75, 0, 130)
+    violet: (127, 0, 255)
+    cyan: (0, 255, 255)
+    purple: (255, 0, 255)
+    white: (255, 255, 255)
+    black (off): (0, 0, 0)
+  """
+  global pixel_modulus
+  pixel_modulus += 1
+  if pixel_modulus % 3 == 0:
+    pixel.fill( (0, 255, 255) )
+    print( "Neopixel changed to cyan" )
+  elif pixel_modulus % 3 == 1:
+    pixel.fill( (255, 0, 255) )
+    print( "Neopixel changed to purple" )
+  else:
+    pixel.fill( (255, 255, 0) )
+    print( "Neopixel changed to yellow" )
+
+
 def infinite_loop():
   global rssi
   loop_count = 0
@@ -160,6 +189,7 @@ def infinite_loop():
     if (time.time() - last_sensor_poll) > sensor_interval:
       loop_count += 1
       poll_sensors()
+      change_pixels()
       print()
       print( f"SHT40 temperature: {average_list( sht_temp ):.2f} C, {c_to_f( average_list( sht_temp ) ):.2f} F" )
       print( f"SHT40 humidity: {average_list( sht_humidity ):.1f} %" )
@@ -211,37 +241,45 @@ def wifi_scan( config ):
 # noinspection PyUnresolvedReferences
 def wifi_connect():
   global mac_address, ip_address
+
   wifi_connection = wifi_scan( configuration )
 
-  print( f"Connecting to {wifi_connection['ssid']}" )
-  wifi.radio.connect( wifi_connection['ssid'], wifi_connection['password'] )
-  print( f"Connected to {wifi_connection['ssid']}!" )
-  mac_address = get_mac_address()
-  ip_address = f"{wifi.radio.ipv4_address}"
-  wifi.radio.hostname = configuration['clientId']
-  print( f"  MAC address: {mac_address}" )
-  print( f"  IP address: {ip_address}" )
-  print( f"  Hostname: {configuration['clientId']}" )
-  if ip_address is not None:
-    print( f"  RSSI: {wifi.radio.ap_info.rssi}" )
+  try:
+    print( f"Connecting to '{wifi_connection['ssid']}'" )
+    wifi.radio.connect( wifi_connection['ssid'], wifi_connection['password'] )
+    print( f"Connected to {wifi_connection['ssid']}!" )
+    mac_address = get_mac_address()
+    ip_address = f"{wifi.radio.ipv4_address}"
+    wifi.radio.hostname = configuration['clientId']
+    print( f"  MAC address: {mac_address}" )
+    print( f"  IP address: {ip_address}" )
+    print( f"  Hostname: {configuration['clientId']}" )
+    if ip_address is not None:
+      print( f"  RSSI: {wifi.radio.ap_info.rssi}" )
+  except (ConnectionError, AttributeError) as connection_error:
+    print( f"{connection_error}" )
+    pixel.fill( (255, 0, 0) )
   return wifi_connection
 
 
 if __name__ == "__main__":
   with open( "privateInfo.json", "r" ) as config_file:
     configuration = json.loads( config_file.read() )
+
   # i2c = board.I2C()  # uses board.SCL and board.SDA
   # noinspection PyUnresolvedReferences
   i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
   sht40 = adafruit_sht4x.SHT4x( i2c )
   print( f"Found SHT4x with serial number {hex( sht40.serial_number )}" )
-
   # noinspection PyUnresolvedReferences
   sht40.mode = adafruit_sht4x.Mode.NOHEAT_HIGHPRECISION
   # Can also set the mode to enable heater
   # sht40.mode = adafruit_sht4x.Mode.LOWHEAT_100MS
   # noinspection PyUnresolvedReferences
   print( f"Current mode is: {adafruit_sht4x.Mode.string[sht40.mode]}" )
+
+  pixel = neopixel.NeoPixel( board.NEOPIXEL, 1 )
+  pixel.fill( (0, 0, 255) )
 
   broker_info = wifi_connect()
 
@@ -280,7 +318,10 @@ if __name__ == "__main__":
     print( "\n--------------------------------------------------" )
     print( "There was a key error, likely in privateInfo.json!" )
     print( "--------------------------------------------------\n" )
-
+    pixel.fill( (255, 0, 0) )
+  except OSError as os_error:
+    print( f"An OS error interrupted the process: {os_error}" )
+    pixel.fill( (255, 0, 0) )
   finally:
     print( f"Unsubscribing from {command_topic}" )
     mqtt_client.unsubscribe( command_topic )
