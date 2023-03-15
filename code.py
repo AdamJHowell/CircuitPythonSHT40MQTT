@@ -33,7 +33,6 @@ import board
 import socketpool
 import wifi as wifi
 
-
 """
 pip install adafruit-circuitpython-sht4x
 pip install adafruit-circuitpython-minimqtt
@@ -107,7 +106,7 @@ def publish( publish_client, userdata, topic, pid ):
 # noinspection PyUnusedLocal
 def message( message_client, topic, inbound_message ):
   # Method called when a client's subscribed feed has a new value.
-  print( "New message on topic {0}: {1}".format( topic, inbound_message ) )
+  print( f"New message on topic {topic}: {inbound_message}" )
   # ToDo: Add code to process commands.
 
 
@@ -214,7 +213,7 @@ def wifi_connect():
   global mac_address, ip_address
   wifi_connection = wifi_scan( configuration )
 
-  print( "Connecting to %s" % wifi_connection['ssid'] )
+  print( f"Connecting to {wifi_connection['ssid']}" )
   wifi.radio.connect( wifi_connection['ssid'], wifi_connection['password'] )
   print( f"Connected to {wifi_connection['ssid']}!" )
   mac_address = get_mac_address()
@@ -242,7 +241,7 @@ if __name__ == "__main__":
   # Can also set the mode to enable heater
   # sht40.mode = adafruit_sht4x.Mode.LOWHEAT_100MS
   # noinspection PyUnresolvedReferences
-  print( "Current mode is: ", adafruit_sht4x.Mode.string[sht40.mode] )
+  print( f"Current mode is: {adafruit_sht4x.Mode.string[sht40.mode]}" )
 
   broker_info = wifi_connect()
 
@@ -269,10 +268,10 @@ if __name__ == "__main__":
   mqtt_client.on_message = message
 
   try:
-    print( "Attempting to connect to %s" % broker_info['broker'] )
-    mqtt_client.connect( host = broker_info['broker'], port = 1883, keep_alive = 60 )
+    print( f"Attempting to connect to {broker_info['broker']}:{broker_info['port']}" )
+    mqtt_client.connect( host = broker_info['broker'], port = broker_info['port'], keep_alive = 60 )
 
-    print( "Subscribing to %s" % command_topic )
+    print( f"Subscribing to {command_topic}" )
     mqtt_client.subscribe( command_topic )
 
     infinite_loop()
@@ -283,8 +282,8 @@ if __name__ == "__main__":
     print( "--------------------------------------------------\n" )
 
   finally:
-    print( "Unsubscribing from %s" % command_topic )
+    print( f"Unsubscribing from {command_topic}" )
     mqtt_client.unsubscribe( command_topic )
 
-    print( "Disconnecting from %s" % mqtt_client.broker )
+    print( f"Disconnecting from {mqtt_client.broker}" )
     mqtt_client.disconnect()
