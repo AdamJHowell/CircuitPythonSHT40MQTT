@@ -186,28 +186,32 @@ def infinite_loop():
   poll_sensors()
   print( f"Polling the sensor every {sensor_interval} seconds." )
   while True:
-    if (time.time() - last_sensor_poll) > sensor_interval:
-      loop_count += 1
-      poll_sensors()
-      change_pixels()
-      print()
-      print( f"SHT40 temperature: {average_list( sht_temp ):.2f} C, {c_to_f( average_list( sht_temp ) ):.2f} F" )
-      print( f"SHT40 humidity: {average_list( sht_humidity ):.1f} %" )
-      print( f"Loop count: {loop_count}" )
-      print( f"RSSI: {rssi}" )
-      print( f"IP address: {ip_address}" )
-      print( f"MAC address: {mac_address}" )
-      print( f"Poll interval: {sensor_interval}" )
-      print( f"Publishing to '{mqtt_client.broker}'" )
-      mqtt_client.publish( celsiusTopic, average_list( sht_temp ) )
-      mqtt_client.publish( FahrenheitTopic, c_to_f( average_list( sht_temp ) ) )
-      mqtt_client.publish( humidityTopic, average_list( sht_humidity ) )
-      mqtt_client.publish( rssi_topic, rssi )
-      mqtt_client.publish( publish_count_topic, loop_count )
-      mqtt_client.publish( mac_topic, mac_address )
-      if ip_address is not None:
-        mqtt_client.publish( ip_topic, ip_address )
-      last_sensor_poll = time.time()
+    try:
+      if (time.time() - last_sensor_poll) > sensor_interval:
+        loop_count += 1
+        poll_sensors()
+        change_pixels()
+        print()
+        print( f"SHT40 temperature: {average_list( sht_temp ):.2f} C, {c_to_f( average_list( sht_temp ) ):.2f} F" )
+        print( f"SHT40 humidity: {average_list( sht_humidity ):.1f} %" )
+        print( f"Loop count: {loop_count}" )
+        print( f"RSSI: {rssi}" )
+        print( f"IP address: {ip_address}" )
+        print( f"MAC address: {mac_address}" )
+        print( f"Poll interval: {sensor_interval}" )
+        print( f"Publishing to '{mqtt_client.broker}'" )
+        mqtt_client.publish( celsiusTopic, average_list( sht_temp ) )
+        mqtt_client.publish( FahrenheitTopic, c_to_f( average_list( sht_temp ) ) )
+        mqtt_client.publish( humidityTopic, average_list( sht_humidity ) )
+        mqtt_client.publish( rssi_topic, rssi )
+        mqtt_client.publish( publish_count_topic, loop_count )
+        mqtt_client.publish( mac_topic, mac_address )
+        if ip_address is not None:
+          mqtt_client.publish( ip_topic, ip_address )
+        last_sensor_poll = time.time()
+    except OSError as recovered_os_error:
+      print( f"The infinite_loop caught an OS error: {recovered_os_error}" )
+      pixel.fill( (255, 0, 0) )
 
 
 def get_mac_address():
