@@ -9,13 +9,15 @@ This is what privateInfo.json should look like:
       "ssid": "nunya",
       "password": "nunya",
       "broker": "nunya",
-      "port": 1883
+      "port": 1883,
+      "topic_root": "Home/QTPy"
     },
     {
       "ssid": "nunya",
       "password": "nunya",
       "broker": "nunya",
-      "port": 1883
+      "port": 1883,
+      "topic_root": "Office/QTPy"
     }
   ],
   "clientId": "QPTyESP32S2",
@@ -41,20 +43,36 @@ pip install adafruit-circuitpython-minimqtt
 
 sht_temp = [21.12, 21.12, 21.12]
 sht_humidity = [21.12, 21.12, 21.12]
-topic_root = "AdamsDesk/QTPy"
-command_topic = topic_root + "/commands"
-rssi_topic = topic_root + "/rssi"
-ip_topic = topic_root + "/ip"
-mac_topic = topic_root + "/mac"
-publish_count_topic = topic_root + "/publishCount"
-celsiusTopic = topic_root + "/SHT40/tempC"
-FahrenheitTopic = topic_root + "/SHT40/tempF"
-humidityTopic = topic_root + "/SHT40/humidity"
 sensor_interval = 15
 mac_address = "00:11:22:AA:BB:CC"
 ip_address = "127.0.0.1"
 rssi = -21
 pixel_modulus = 0
+
+
+def set_topics( root_topic ):
+  global topic_root, command_topic, rssi_topic, ip_topic, mac_topic, publish_count_topic, celsiusTopic, FahrenheitTopic, humidityTopic
+  topic_root = root_topic
+  command_topic = topic_root + "/commands"
+  rssi_topic = topic_root + "/rssi"
+  ip_topic = topic_root + "/ip"
+  mac_topic = topic_root + "/mac"
+  publish_count_topic = topic_root + "/publishCount"
+  celsiusTopic = topic_root + "/SHT40/tempC"
+  FahrenheitTopic = topic_root + "/SHT40/tempF"
+  humidityTopic = topic_root + "/SHT40/humidity"
+
+
+topic_root = "AdamsDesk/QTPy"
+set_topics( topic_root )
+command_topic = ""
+rssi_topic = ""
+ip_topic = ""
+mac_topic = ""
+publish_count_topic = ""
+celsiusTopic = ""
+FahrenheitTopic = ""
+humidityTopic = ""
 
 
 # noinspection PyUnusedLocal
@@ -209,9 +227,12 @@ def infinite_loop():
         if ip_address is not None:
           mqtt_client.publish( ip_topic, ip_address )
         last_sensor_poll = time.time()
+    except BrokenPipeError as pipe_error:
+      print( f"BrokenPipeError: {pipe_error}" )
     except OSError as recovered_os_error:
       print( f"The infinite_loop caught an OS error: {recovered_os_error}" )
       pixel.fill( (255, 0, 0) )
+      wifi_connect()
 
 
 def get_mac_address():
@@ -266,6 +287,29 @@ def wifi_connect():
   return wifi_connection
 
 
+def configure_client():
+  # Set up a MiniMQTT Client
+  client = mqtt_class.MQTT(
+    broker = broker_info['broker'],
+    port = broker_info["port"],
+    username = configuration["aio_username"],
+    password = configuration["aio_key"],
+    socket_pool = pool,
+    client_id = configuration["clientId"],
+    is_ssl = False,
+  )
+  # Connect callback handlers to mqtt_client
+  client.on_connect = connect
+  client.on_disconnect = disconnect
+  client.on_subscribe = subscribe
+  client.on_unsubscribe = unsubscribe
+  client.on_publish = publish
+  client.on_message = message
+
+  set_topics( broker_info['topic_root'] )
+  return client
+
+
 if __name__ == "__main__":
   with open( "privateInfo.json", "r" ) as config_file:
     configuration = json.loads( config_file.read() )
@@ -282,6 +326,7 @@ if __name__ == "__main__":
   # noinspection PyUnresolvedReferences
   print( f"Current mode is: {adafruit_sht4x.Mode.string[sht40.mode]}" )
 
+  # noinspection PyUnresolvedReferences
   pixel = neopixel.NeoPixel( board.NEOPIXEL, 1 )
   pixel.fill( (0, 0, 255) )
 
@@ -290,24 +335,7 @@ if __name__ == "__main__":
   # noinspection PyUnresolvedReferences
   pool = socketpool.SocketPool( wifi.radio )
 
-  # Set up a MiniMQTT Client
-  mqtt_client = mqtt_class.MQTT(
-    broker = broker_info['broker'],
-    port = broker_info["port"],
-    username = configuration["aio_username"],
-    password = configuration["aio_key"],
-    socket_pool = pool,
-    client_id = configuration["clientId"],
-    is_ssl = False,
-  )
-
-  # Connect callback handlers to mqtt_client
-  mqtt_client.on_connect = connect
-  mqtt_client.on_disconnect = disconnect
-  mqtt_client.on_subscribe = subscribe
-  mqtt_client.on_unsubscribe = unsubscribe
-  mqtt_client.on_publish = publish
-  mqtt_client.on_message = message
+  mqtt_client = configure_client()
 
   try:
     print( f"Attempting to connect to {broker_info['broker']}:{broker_info['port']}" )
