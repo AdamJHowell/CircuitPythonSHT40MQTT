@@ -2,6 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
+This program is meant to use an Adafruit QTPy ESP32 to read an SHT40 sensor and publish the values to an MQTT broker.
+
+Some variables are read in from a sidecar file named privateInfo.json, which contains the Wi-Fi SSID, Wi-Fi password,
+the broker address and port, and the root topic.
+The "root topic" is prepended to all other MQTT topics, and usually identifies the location and device.
+
 This is what privateInfo.json should look like:
 {
   "brokerConnections": [
